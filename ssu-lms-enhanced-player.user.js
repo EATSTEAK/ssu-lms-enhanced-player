@@ -6,7 +6,7 @@
 // @grant       GM_addStyle
 // @grant       GM_getValue
 // @grant       GM_setValue
-// @version     1.1.0
+// @version     1.2.0
 // @author      EATSTEAK
 // @license     MIT License; https://opensource.org/licenses/MIT
 // @require https://cdn.jsdelivr.net/npm/@violentmonkey/dom@1
@@ -16,7 +16,7 @@
 // ==/UserScript==
 
 // Variable for features.
-const DEBUG = false;
+const DEBUG = true;
 const DOWNLOAD = true;
 
 // Inject bootstrap and custom stylesheet.
@@ -154,13 +154,46 @@ function prepareDownload({ title, author, mainMedia, mediaUri, pseudoUri }) {
       const downloadBtnText = '다운로드';
       const downloadBtn = $("<button class='btn btn-secondary btn-sm mx-1'>" + downloadBtnText + "</button>");
       $("#downloader-ext").append(downloadBtn);
-      $(downloadBtn).on('click', () => {
-        const link = document.createElement('a');
-        link.href = soVideoUri;
-        link.download = videoTitle;
-        link.target = '_blank';
-        link.click();
-        link.remove();
+      $(downloadBtn).on('click', async () => {
+        const altDownload = await GM_getValue('altDownload', false);
+        if(!altDownload) {
+          const link = document.createElement('a');
+          link.href = soVideoUri;
+          link.download = videoTitle;
+          link.click();
+          link.remove();
+        } else {
+          const href = window.location.href
+          GM_download({
+            url: cdnVideoUri,
+            name: videoTitle,
+            headers: {
+              Accept: 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+              Host: 'ssuin-object.commonscdn.com',
+              Referer: 'https://commons.ssu.ac.kr/',
+              Range: 'bytes=0-'
+            },
+            onprogress: (event) => {
+              const percent = Math.round(((event.loaded / event.total) * 100));
+              $(downloadBtn).text(`${downloadBtnText} (${percent}%)`);
+              $(downloadBtn).attr('disabled', true);
+            },
+            onerror: (event) => {
+              console.error(event.error);
+              $(downloadBtn).text(`${downloadBtnText} (오류!)`);
+              $(downloadBtn).attr('disabled', false);
+            },
+            ontimeout: () => {
+              console.error('Timeout!');
+              $(downloadBtn).text(`${downloadBtnText} (시간 초과)`);
+              $(downloadBtn).attr('disabled', false);
+            },
+            onload: () => {
+              $(downloadBtn).text(downloadBtnText);
+              $(downloadBtn).attr('disabled', false);
+            }
+          });
+        }
       });
       // If media are plural, create download dropdown with all found media.
     } else {
@@ -175,19 +208,65 @@ function prepareDownload({ title, author, mainMedia, mediaUri, pseudoUri }) {
         const downloadBtnText = '#' + (idx + 1);
         const downloadBtn = $("<a class='dropdown-item'>" + downloadBtnText + "</a>");
         $(dropdownMenu).append(downloadBtn);
-        $(downloadBtn).on('click', () => {
-          const link = document.createElement('a');
-          console.log(soVideoUri);
-          link.href = soVideoUri;
-          link.download = videoTitle;
-          link.target = '_blank';
-          link.click();
-          link.remove();
+        $(downloadBtn).on('click', async () => {
+          const altDownload = await GM_getValue('altDownload', false);
+          if(!altDownload) {
+            const link = document.createElement('a');
+            console.log(soVideoUri);
+            link.href = soVideoUri;
+            link.download = videoTitle;
+            link.target = '_blank';
+            link.click();
+            link.remove();
+          } else {
+            const href = window.location.href;
+            GM_download({
+              url: cdnVideoUri,
+              name: videoTitle,
+              headers: {
+                Host: 'ssuin-object.commonscdn.com',
+                Referer: 'https://commons.ssu.ac.kr/',
+                Range: 'bytes=0-'
+              },
+              onprogress: (event) => {
+                const percent = Math.round(((event.loaded / event.total) * 100));
+                $(downloadBtn).text(`${downloadBtnText} (${percent}%)`);
+                $(downloadBtn).attr('disabled', true);
+              },
+              onerror: (event) => {
+                console.error(event.error);
+                $(downloadBtn).text(`${downloadBtnText} (오류!)`);
+                $(downloadBtn).attr('disabled', false);
+              },
+              ontimeout: () => {
+                console.error('Timeout!');
+                $(downloadBtn).text(`${downloadBtnText} (시간 초과)`);
+                $(downloadBtn).attr('disabled', false);
+              },
+              onload: () => {
+                $(downloadBtn).text(downloadBtnText);
+                $(downloadBtn).attr('disabled', false);
+              }
+            });
+          }
         });
       });
       $(dropdown).append(dropdownMenu);
       $("#downloader-ext").append(dropdown);
     }
+    (async () => {
+      const altDownload = await GM_getValue('altDownload', false);
+      const altDownloadCheckbox = $(`<div class="form-check-inline">
+  <input class="form-check-input" type="checkbox" value="${altDownload}" id="altDownload">
+  <label class="form-check-label text-white" for="flexCheckDefault">
+    대체 다운로드 방법 사용
+  </label>
+</div>`);
+      $('#downloader-ext').append(altDownloadCheckbox);
+      $('#altDownload').change(async function () {
+        GM_setValue('altDownload', this.checked);
+      })
+    })();
   }
 }
 
